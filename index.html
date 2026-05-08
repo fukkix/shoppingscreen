@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920" />
+  <meta name="description" content="海淀区智慧购物数据监控中心 - 实时商铺数据可视化大屏" />
+  <title>海淀区智慧购物数据监控中心</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <!-- ===== 背景粒子层 ===== -->
+  <canvas id="particle-canvas"></canvas>
+
+  <!-- ===== 主容器（scale 适配） ===== -->
+  <div id="screen-root">
+
+    <!-- ===== 顶部标题栏 ===== -->
+    <header id="header">
+      <div class="header-deco left"></div>
+      <div class="header-center">
+        <div class="header-scan-line"></div>
+        <h1 id="main-title">海淀区智慧购物数据监控中心</h1>
+        <div class="header-sub">
+          <span class="header-badge">REAL-TIME</span>
+          <span id="header-clock" class="header-clock">2026-05-08 10:00:00</span>
+          <span class="header-badge">HAIDIAN</span>
+        </div>
+      </div>
+      <div class="header-deco right"></div>
+    </header>
+
+    <!-- ===== 主体区域 ===== -->
+    <main id="main-body">
+
+      <!-- ===== 左侧面板 ===== -->
+      <aside id="panel-left" class="panel">
+        <!-- KPI 指标卡 -->
+        <section class="panel-section" id="kpi-section">
+          <div class="section-title"><span class="title-icon">◈</span> 核心指标</div>
+          <div id="kpi-cards" class="kpi-grid"></div>
+        </section>
+
+        <!-- 品类饼图 -->
+        <section class="panel-section" id="pie-section">
+          <div class="section-title"><span class="title-icon">◈</span> 品类销售分布</div>
+          <div id="pie-chart" class="chart-box" style="height: 280px;"></div>
+        </section>
+      </aside>
+
+      <!-- ===== 中央地图区 ===== -->
+      <div id="panel-center">
+        <div id="map-container">
+          <div id="map-chart" class="chart-box" style="width:100%;height:100%;"></div>
+          <!-- 2D / 3D 切换按钮 -->
+          <button id="map-mode-toggle" class="map-mode-btn" title="切换2D/3D视图">
+            <span class="mode-icon">◇</span>
+            <span class="mode-label">3D 街区</span>
+          </button>
+        </div>
+        <!-- 购买人选择器 -->
+        <div id="buyer-selector">
+          <div class="section-title" style="margin-bottom:8px;"><span class="title-icon">◈</span> 购物轨迹追踪</div>
+          <div id="buyer-list" class="buyer-list"></div>
+        </div>
+      </div>
+
+      <!-- ===== 右侧面板 ===== -->
+      <aside id="panel-right" class="panel">
+        <!-- 商铺信息轮播 -->
+        <section class="panel-section" id="shop-section">
+          <div class="section-title"><span class="title-icon">◈</span> 商铺实时监控</div>
+          <div id="shop-carousel" class="shop-carousel"></div>
+        </section>
+
+        <!-- 购物流水 -->
+        <section class="panel-section" id="feed-section">
+          <div class="section-title"><span class="title-icon">◈</span> 实时购物流水</div>
+          <div id="purchase-feed" class="purchase-feed"></div>
+        </section>
+      </aside>
+    </main>
+
+    <!-- ===== 底部图表区 ===== -->
+    <footer id="footer-charts">
+      <section class="panel-section footer-chart-item">
+        <div class="section-title"><span class="title-icon">◈</span> 24h 销售趋势</div>
+        <div id="line-chart" class="chart-box" style="height:200px;"></div>
+      </section>
+      <section class="panel-section footer-chart-item">
+        <div class="section-title"><span class="title-icon">◈</span> 商铺销售排行</div>
+        <div id="bar-chart" class="chart-box" style="height:200px;"></div>
+      </section>
+      <section class="panel-section footer-chart-item">
+        <div class="section-title"><span class="title-icon">◈</span> 客流量分析</div>
+        <div id="radar-chart" class="chart-box" style="height:200px;"></div>
+      </section>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
