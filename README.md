@@ -1,5 +1,8 @@
 # Shopping Screen Dashboard
 
+> [!NOTE]
+> 说明：这只是个示范 demo (This is just a demonstration demo).
+
 A high-fidelity data visualization dashboard for shopping analytics. 
 
 ## 🎨 Design Theme
