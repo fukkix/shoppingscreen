@@ -13,6 +13,17 @@ export function initRadarChart(container) {
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
+      appendToBody: true,
+      confine: true,
+      position: (pos, params, el, elRect, size) => {
+        const obj = { top: pos[1] - 50 }; // 垂直跟随鼠标，轻微下偏移
+        if (pos[0] < size.viewSize[0] / 2) {
+          obj.left = pos[0] + 50;
+        } else {
+          obj.right = size.viewSize[0] - pos[0] + 50;
+        }
+        return obj;
+      },
       backgroundColor: 'rgba(10,16,28,0.95)', borderColor: '#e8863a', borderWidth: 1,
       textStyle: { color: '#c8cdd8', fontSize: 11 }
     },

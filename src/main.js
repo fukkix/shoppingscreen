@@ -10,7 +10,7 @@ import './css/animations.css';
 
 // Module Imports
 // mapbox-gl 已移除，使用 ECharts 原生 geo 渲染区域边界
-import { initMapChart, resizeMap, toggleMapMode } from './js/map-chart.js';
+import { initMapChart, resizeMap, toggleMapMode, setMapFullscreen } from './js/map-chart.js';
 import { initLineChart, resizeLine } from './js/line-chart.js';
 import { initBarChart, resizeBar } from './js/bar-chart.js';
 import { initPieChart, resizePie } from './js/pie-chart.js';
@@ -87,11 +87,52 @@ async function init() {
   const fsBtn = document.getElementById('map-fullscreen-btn');
   fsBtn.addEventListener('click', () => {
     const mapContainer = document.getElementById('map-container');
+    const isMapFs = mapContainer.classList.toggle('map-fullscreen');
+    fsBtn.classList.toggle('active', isMapFs);
+    fsBtn.querySelector('.mode-label').textContent = isMapFs ? '退出' : '全屏';
+    setMapFullscreen(isMapFs);
+    // 通知地图 resize
+    setTimeout(() => resizeMap(), 300);
+  });
+
+  // Page Fullscreen (F11 效果，使用浏览器 Fullscreen API)
+  const pageFsBtn = document.getElementById('page-fullscreen-btn');
+  pageFsBtn.addEventListener('click', () => {
     if (!document.fullscreenElement) {
-      mapContainer.requestFullscreen?.().catch(() => {});
+      document.documentElement.requestFullscreen().catch(() => {});
     } else {
-      document.exitFullscreen?.();
+      document.exitFullscreen();
     }
+  });
+
+  // 监听浏览器全屏状态变化（F11 / ESC / 代码触发都会触发此事件）
+  document.addEventListener('fullscreenchange', () => {
+    const pageFsBtn = document.getElementById('page-fullscreen-btn');
+    const isPageFs = !!document.fullscreenElement;
+    pageFsBtn.classList.toggle('active', isPageFs);
+    pageFsBtn.querySelector('.fs-label').textContent = isPageFs ? '退出' : '全屏';
+    // 全屏/退出全屏后视口尺寸变化，重新适配缩放
+    setTimeout(() => {
+      adaptScale();
+      resizeMap();
+    }, 100);
+  });
+
+  // ESC 键：优先退出地图全屏，再退出页面全屏
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const mapContainer = document.getElementById('map-container');
+    const fsBtn = document.getElementById('map-fullscreen-btn');
+    // 优先退出地图 CSS 全屏
+    if (mapContainer.classList.contains('map-fullscreen')) {
+      mapContainer.classList.remove('map-fullscreen');
+      fsBtn.classList.remove('active');
+      fsBtn.querySelector('.mode-label').textContent = '全屏';
+      setMapFullscreen(false);
+      setTimeout(() => resizeMap(), 300);
+      e.preventDefault();
+    }
+    // 地图未全屏时，让浏览器默认行为退出页面全屏（Fullscreen API）
   });
 
   // Buyer Selector

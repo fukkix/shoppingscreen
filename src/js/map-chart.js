@@ -18,8 +18,18 @@ const MAP_ZOOM_2D = 1.15;
 
 let mapChart = null;
 let currentBuyerIndex = 0;
+let selectedBuyerIndices = new Set([0]);
 let is3D = false;
 let mapRegistered = false;
+let interactionCallback = null; // 地图交互回调（拖拽/缩放时触发）
+
+// 供外部设置交互回调
+export function setMapInteractionCallback(cb) { interactionCallback = cb; }
+
+// 供外部查询地图是否处于全屏
+let mapFullscreen = false;
+export function getMapFullscreen() { return mapFullscreen; }
+export function setMapFullscreen(val) { mapFullscreen = val; }
 
 // ===================== 注册地图 =====================
 async function ensureMapRegistered() {
@@ -117,6 +127,30 @@ function generateFillerBuildings() {
     });
   }
   return fillers;
+}
+
+// ===================== 立体路牌生成 (3D) =====================
+function generateSignposts() {
+  return shops.map((shop, i) => {
+    const baseHeight = shop.todaySales / 25000;
+    // 每个路牌均匀分布在不同角度，避免重叠
+    const angle = (Math.PI * 2 * i) / shops.length + 0.3;
+    const dist = 0.0045;
+    const postHeight = Math.max(baseHeight + 4, 8);
+    return {
+      name: shop.name,
+      value: [
+        shop.coords[0] + Math.cos(angle) * dist,
+        shop.coords[1] + Math.sin(angle) * dist,
+        postHeight
+      ],
+      barSize: 0.06,
+      itemStyle: {
+        color: '#e8863a',
+        opacity: 0.95
+      }
+    };
+  });
 }
 
 // ===================== 2D Geo 配置 (黑白灰度战术风格) =====================
@@ -249,14 +283,14 @@ function render2DMap() {
     series: [
       buildHUDGridSeries(),
       buildShopScatter2D(),
-      buildTrajectoryLines2D([]),
-      buildOrderScatter2D([])
+      ...buyers.map(b => buildTrajectoryLines2D([], b.color, `轨迹-${b.name}`)),
+      ...buyers.map(b => buildOrderScatter2D([], b.color, `顺序-${b.name}`))
     ],
     graphic: buildHUDGraphics()
   };
   mapChart.setOption(option);
 
-  // 同步所有 geo 层的平移/缩放
+  // 同步所有 geo 层的平移/缩放，并触发交互回调
   mapChart.on('georoam', function() {
     const opt = mapChart.getOption();
     const mainGeo = opt.geo[2];
@@ -267,41 +301,14 @@ function render2DMap() {
         {}
       ]
     });
+    // 通知外部：地图被操作了
+    if (interactionCallback) interactionCallback();
   });
 }
 
 // ===================== HUD 装饰图形 (黑白风格) =====================
 function buildHUDGraphics() {
   const items = [];
-  // 角落瞄准线
-  const cornerSize = 40;
-  const corners = [
-    { left: 10, top: 10 },
-    { right: 10, top: 10 },
-    { left: 10, bottom: 10 },
-    { right: 10, bottom: 10 }
-  ];
-  corners.forEach((pos, i) => {
-    const isLeft = i === 0 || i === 2;
-    const isTop = i === 0 || i === 1;
-    items.push({
-      type: 'group',
-      left: pos.left, right: pos.right,
-      top: pos.top, bottom: pos.bottom,
-      children: [
-        {
-          type: 'line',
-          shape: { x1: 0, y1: 0, x2: isLeft ? cornerSize : -cornerSize, y2: 0 },
-          style: { stroke: 'rgba(180,180,180,0.4)', lineWidth: 1.5 }
-        },
-        {
-          type: 'line',
-          shape: { x1: 0, y1: 0, x2: 0, y2: isTop ? cornerSize : -cornerSize },
-          style: { stroke: 'rgba(180,180,180,0.4)', lineWidth: 1.5 }
-        }
-      ]
-    });
-  });
   // 中心十字准星
   items.push({
     type: 'group',
@@ -342,8 +349,8 @@ function buildShopScatter2D() {
     rippleEffect: { brushType: 'stroke', scale: 5, period: 3 },
     itemStyle: {
       color: p => getShopColor(shops.find(s => s.name === p.name)?.category),
-      shadowBlur: 12,
-      shadowColor: 'rgba(200,200,200,0.3)'
+      shadowBlur: 4,
+      shadowColor: 'rgba(200,200,200,0.15)'
     },
     label: {
       show: true, position: 'top',
@@ -375,9 +382,9 @@ function buildShopScatter2D() {
   };
 }
 
-function buildTrajectoryLines2D(data, color = '#aaaaaa') {
+function buildTrajectoryLines2D(data, color = '#aaaaaa', name = '购物轨迹') {
   return {
-    name: '购物轨迹',
+    name,
     type: 'lines',
     coordinateSystem: 'geo',
     geoIndex: 2,
@@ -394,16 +401,16 @@ function buildTrajectoryLines2D(data, color = '#aaaaaa') {
   };
 }
 
-function buildOrderScatter2D(data) {
+function buildOrderScatter2D(data, color = '#e0e0e0', name = '轨迹顺序') {
   return {
-    name: '轨迹顺序',
+    name,
     type: 'scatter',
     coordinateSystem: 'geo',
     geoIndex: 2,
     data,
     symbol: 'circle',
     symbolSize: 22,
-    itemStyle: { color: '#e0e0e0', shadowBlur: 12, shadowColor: '#e0e0e0' },
+    itemStyle: { color, shadowBlur: 12, shadowColor: color },
     label: {
       show: true, formatter: p => `{bg|${p.name}}`,
       color: '#fff', fontSize: 12, fontWeight: 'bold',
@@ -426,6 +433,7 @@ function render3DMap() {
   const shopClusters = shops.flatMap(shop => generateBuildingCluster(shop));
   const fillerBuildings = generateFillerBuildings();
   const allBuildings = [...shopClusters, ...fillerBuildings];
+  const signposts = generateSignposts();
 
   const option = {
     backgroundColor: 'transparent',
@@ -522,157 +530,273 @@ function render3DMap() {
         itemStyle: { color: '#e8863a', opacity: 0.8, borderColor: '#d4a24c', borderWidth: 2 },
         label: { show: false }
       },
-      {
-        name: '购物轨迹3D',
+      ...buyers.map(b => ({
+        name: `轨迹3D-${b.name}`,
         type: 'lines3D',
         coordinateSystem: 'geo3D',
         data: [{ coords: [[116.31, 40.00, 0], [116.31, 40.00, 0]], lineStyle: { opacity: 0 } }],
-        effect: { show: true, period: 4, trailWidth: 4, trailLength: 0.5, trailColor: '#e8863a' },
-        lineStyle: { color: '#e8863a', width: 2, opacity: 0.7 }
+        effect: { show: true, period: 4, trailWidth: 4, trailLength: 0.5, trailColor: b.color },
+        lineStyle: { color: b.color, width: 2, opacity: 0.7 }
+      })),
+      // --- 立体路牌 ---
+      {
+        name: '立体路牌',
+        type: 'bar3D',
+        coordinateSystem: 'geo3D',
+        data: signposts,
+        barSize: 0.06,
+        minHeight: 0.5,
+        shading: 'lambert',
+        label: {
+          show: true,
+          distance: 8,
+          formatter: p => p.name || '',
+          textStyle: {
+            color: '#ffffff',
+            fontSize: 13,
+            fontWeight: 'bold',
+            fontFamily: 'Orbitron, Noto Sans SC, sans-serif',
+            backgroundColor: 'rgba(0, 0, 0, 0.92)',
+            padding: [8, 18],
+            borderWidth: 1,
+            borderColor: '#e8863a',
+            borderRadius: 4,
+            textShadowColor: 'rgba(0, 0, 0, 0.4)',
+            textShadowBlur: 4
+          }
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 15,
+            fontWeight: 'bold',
+            distance: 10,
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 15,
+              fontWeight: 'bold',
+              backgroundColor: 'rgba(0, 0, 0, 0.95)',
+              padding: [10, 22],
+              borderWidth: 1,
+              borderColor: '#ffaa55',
+              borderRadius: 4,
+              textShadowColor: 'rgba(0, 0, 0, 0.4)',
+              textShadowBlur: 6
+            }
+          },
+          itemStyle: { color: '#ffaa55', opacity: 1 }
+        },
+        animationDurationUpdate: 800,
+        animationEasingUpdate: 'cubicOut',
+        zlevel: 15
       }
     ]
   };
   mapChart.setOption(option);
+
+  // 3D 地图拖拽/缩放时触发交互回调
+  mapChart.on('georoam3D', function() {
+    if (interactionCallback) interactionCallback();
+  });
 }
 
 // ===================== Shared: Tooltip =====================
 function buildTooltip() {
   return {
     trigger: 'item',
-    backgroundColor: 'rgba(8, 8, 8, 0.95)',
-    borderColor: '#888888',
-    borderWidth: 1,
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderWidth: 0,
+    padding: 0,
     textStyle: { color: '#d0d0d0', fontSize: 12 },
     formatter: function(params) {
       const shop = shops.find(s => s.name === params.name);
       if (shop) {
-        return `<div style="font-size:14px;font-weight:bold;color:#e0e0e0;margin-bottom:6px;">${shop.name}</div>
-          <div style="color:#808080;font-size:11px;margin-bottom:6px;">${shop.address}</div>
-          <div>今日客流：<span style="color:#a0d0a0;font-weight:bold;">${shop.todayVisitors.toLocaleString()}</span> 人</div>
-          <div>今日销售：<span style="color:#d0c0a0;font-weight:bold;">¥${shop.todaySales.toLocaleString()}</span></div>
-          <div>评分：<span style="color:#d0c0a0;">★ ${shop.rating}</span></div>
-          <div style="margin-top:4px;color:#808080;">畅销品：${shop.topProducts.join('、')}</div>`;
+        const bar = (val, max) => {
+          const pct = Math.min(100, Math.round((val / max) * 100));
+          return `<span style="display:inline-block;width:28px;height:3px;background:#333;border-radius:1px;overflow:hidden;vertical-align:middle;margin-left:6px;"><span style="display:block;height:100%;width:${pct}%;background:#e8863a;border-radius:1px;"></span></span>`;
+        };
+        return `
+          <div style="background:rgba(12,16,22,0.96);border-radius:6px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.6);min-width:200px;font-family:'Orbitron','Noto Sans SC',sans-serif;">
+            <div style="background:#c45e1a;padding:8px 14px;color:#fff;font-size:14px;font-weight:bold;letter-spacing:1px;">
+              ${shop.name}
+            </div>
+            <div style="padding:10px 14px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;color:#a0a0a0;font-size:11px;margin-bottom:8px;">
+                <span>${shop.address}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;color:#d0d0d0;font-size:12px;margin-bottom:6px;">
+                <span>今日客流</span>
+                <span style="color:#fff;font-weight:bold;">${shop.todayVisitors.toLocaleString()} 人${bar(shop.todayVisitors, 5000)}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;color:#d0d0d0;font-size:12px;margin-bottom:6px;">
+                <span>今日销售</span>
+                <span style="color:#fff;font-weight:bold;">¥${(shop.todaySales/10000).toFixed(1)}万${bar(shop.todaySales, 300000)}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;color:#d0d0d0;font-size:12px;margin-bottom:6px;">
+                <span>评分</span>
+                <span style="color:#fff;font-weight:bold;">★ ${shop.rating}${bar(shop.rating*20, 100)}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;color:#d0d0d0;font-size:12px;margin-bottom:2px;">
+                <span>营业时间</span>
+                <span style="color:#fff;font-weight:bold;">${shop.openTime}</span>
+              </div>
+              <div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);color:#909090;font-size:11px;">
+                畅销品：${shop.topProducts.join('、')}
+              </div>
+            </div>
+          </div>`;
       }
       return '';
     }
   };
 }
 
-// ===================== Buyer Selection =====================
+// ===================== Buyer Selection (多选) =====================
 export function selectBuyer(index) {
+  selectBuyers([index]);
+}
+
+export function selectBuyers(indices) {
   if (!mapChart) return;
-  currentBuyerIndex = index;
-  const buyer = buyers[index];
+  selectedBuyerIndices = new Set(indices);
+  currentBuyerIndex = indices.length > 0 ? indices[indices.length - 1] : 0;
+
   const shopMap = {};
   shops.forEach(s => { shopMap[s.name] = s.coords; });
 
-  const lineData = [];
-  for (let i = 0; i < buyer.trajectory.length - 1; i++) {
-    const from = buyer.trajectory[i];
-    const to = buyer.trajectory[i + 1];
-    if (shopMap[from] && shopMap[to]) {
-      lineData.push({
-        fromName: from, toName: to,
-        coords: [shopMap[from], shopMap[to]]
-      });
-    }
-  }
-
   if (is3D) {
-    selectBuyer3D(buyer, lineData, shopMap);
+    selectBuyers3D(indices, shopMap);
   } else {
-    selectBuyer2D(buyer, lineData, shopMap);
+    selectBuyers2D(indices, shopMap);
   }
 }
 
-function selectBuyer2D(buyer, lineData, shopMap) {
-  const orderData = buyer.trajectory.map((shopName, idx) => {
-    const coords = shopMap[shopName];
-    if (!coords) return null;
-    return {
-      name: `${idx + 1}`,
-      value: coords,
-      itemStyle: { color: buyer.color, shadowBlur: 12, shadowColor: buyer.color }
-    };
-  }).filter(Boolean);
+export function getSelectedBuyerIndices() {
+  return Array.from(selectedBuyerIndices);
+}
 
-  mapChart.setOption({
-    series: [
-      {
-        name: '商铺',
-        type: 'effectScatter',
-        data: shops.map(shop => ({
-          name: shop.name,
-          value: [...shop.coords, shop.todaySales],
-        })),
-      },
-      {
-        name: '购物轨迹',
+function selectBuyers2D(indices, shopMap) {
+  const updates = [];
+
+  buyers.forEach((buyer, i) => {
+    const isSelected = indices.includes(i);
+
+    if (isSelected) {
+      const lineData = [];
+      for (let j = 0; j < buyer.trajectory.length - 1; j++) {
+        const from = buyer.trajectory[j];
+        const to = buyer.trajectory[j + 1];
+        if (shopMap[from] && shopMap[to]) {
+          lineData.push({
+            fromName: from, toName: to,
+            coords: [shopMap[from], shopMap[to]]
+          });
+        }
+      }
+
+      const orderData = buyer.trajectory.map((shopName, idx) => {
+        const coords = shopMap[shopName];
+        if (!coords) return null;
+        return {
+          name: `${idx + 1}`,
+          value: coords,
+          itemStyle: { color: buyer.color, shadowBlur: 4, shadowColor: buyer.color }
+        };
+      }).filter(Boolean);
+
+      updates.push({
+        name: `轨迹-${buyer.name}`,
         type: 'lines',
         data: lineData,
         effect: {
-          show: true, period: 4, trailLength: 0.5,
-          symbol: 'arrow', symbolSize: 7, color: buyer.color
+          show: true, period: 4, trailLength: 0.3,
+          symbol: 'arrow', symbolSize: 5, color: buyer.color
         },
         lineStyle: {
-          color: buyer.color, width: 2.5, opacity: 0.7, curveness: 0.3,
-          shadowColor: buyer.color, shadowBlur: 8
+          color: buyer.color, width: 2, opacity: 0.6, curveness: 0.3,
+          shadowColor: buyer.color, shadowBlur: 3
         }
-      },
-      {
-        name: '轨迹顺序',
+      });
+      updates.push({
+        name: `顺序-${buyer.name}`,
         type: 'scatter',
         data: orderData,
-        itemStyle: { color: buyer.color, shadowBlur: 12, shadowColor: buyer.color },
-        label: { show: true, formatter: '{b}', color: '#fff', fontSize: 12, fontWeight: 'bold' },
-      }
-    ]
+        itemStyle: { color: buyer.color, shadowBlur: 4, shadowColor: buyer.color },
+        label: { show: true, formatter: '{b}', color: '#fff', fontSize: 12, fontWeight: 'bold' }
+      });
+    } else {
+      updates.push({
+        name: `轨迹-${buyer.name}`,
+        type: 'lines',
+        data: [],
+        effect: { show: false },
+        lineStyle: { opacity: 0 }
+      });
+      updates.push({
+        name: `顺序-${buyer.name}`,
+        type: 'scatter',
+        data: []
+      });
+    }
   });
+
+  mapChart.setOption({ series: updates });
 }
 
-function selectBuyer3D(buyer, lineData, shopMap) {
-  const lines3DData = lineData.map(l => ({
-    coords: l.coords.map(c => [...c, 5])
-  }));
+function selectBuyers3D(indices, shopMap) {
+  const updates = [];
 
-  const trajShopNames = new Set(buyer.trajectory);
-  const highlightedClusters = shops.flatMap(shop => {
-    const cluster = generateBuildingCluster(shop);
-    const onTrajectory = trajShopNames.has(shop.name);
-    return cluster.map(b => ({
-      ...b,
-      itemStyle: {
-        ...b.itemStyle,
-        color: onTrajectory ? buyer.color : b.itemStyle.color,
-        opacity: onTrajectory ? 0.95 : 0.5
-      }
-    }));
+  // 多选时建筑保持原色，不做高亮/变暗
+  const shopClusters = shops.flatMap(shop => generateBuildingCluster(shop));
+  const fillerBuildings = generateFillerBuildings();
+  updates.push({
+    name: '商铺建筑',
+    type: 'bar3D',
+    data: [...shopClusters, ...fillerBuildings]
   });
-  const fillers = generateFillerBuildings().map(f => ({
-    ...f,
-    itemStyle: { ...f.itemStyle, opacity: 0.65 }
-  }));
 
-  mapChart.setOption({
-    series: [
-      {
-        name: '商铺建筑',
-        type: 'bar3D',
-        data: [...highlightedClusters, ...fillers]
-      },
-      {
-        name: '商铺基座',
-        type: 'scatter3D'
-      },
-      {
-        name: '购物轨迹3D',
+  updates.push({ name: '商铺基座', type: 'scatter3D' });
+
+  buyers.forEach((buyer, i) => {
+    const isSelected = indices.includes(i);
+
+    if (isSelected) {
+      const lineData = [];
+      for (let j = 0; j < buyer.trajectory.length - 1; j++) {
+        const from = buyer.trajectory[j];
+        const to = buyer.trajectory[j + 1];
+        if (shopMap[from] && shopMap[to]) {
+          lineData.push({
+            fromName: from, toName: to,
+            coords: [shopMap[from], shopMap[to]]
+          });
+        }
+      }
+      const lines3DData = lineData.map(l => ({
+        coords: l.coords.map(c => [...c, 5])
+      }));
+
+      updates.push({
+        name: `轨迹3D-${buyer.name}`,
         type: 'lines3D',
         data: lines3DData.length ? lines3DData : [{ coords: [[0,0,0], [0,0,0]], lineStyle: { opacity: 0 } }],
-        effect: { show: true, period: 4, trailWidth: 5, trailLength: 0.5, trailColor: buyer.color },
-        lineStyle: { color: buyer.color, width: 3, opacity: 0.85 }
-      }
-    ]
+        effect: { show: true, period: 4, trailWidth: 3, trailLength: 0.3, trailColor: buyer.color },
+        lineStyle: { color: buyer.color, width: 2, opacity: 0.7 }
+      });
+    } else {
+      updates.push({
+        name: `轨迹3D-${buyer.name}`,
+        type: 'lines3D',
+        data: [{ coords: [[0,0,0], [0,0,0]], lineStyle: { opacity: 0 } }],
+        effect: { show: false }
+      });
+    }
   });
+
+  updates.push({ name: '立体路牌', type: 'bar3D' });
+
+  mapChart.setOption({ series: updates });
 }
 
 // ===================== Utility =====================

@@ -98,6 +98,48 @@
 .header-deco.left::after { right: 0; }
 .header-deco.right::after { left: 0; }
 
+/* Header Fullscreen Button */
+.header-fs-btn {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(10, 10, 10, 0.85);
+  border: 1px solid rgba(160, 160, 160, 0.35);
+  border-radius: 2px;
+  color: #c0c0c0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+  letter-spacing: 1px;
+}
+.header-fs-btn:hover {
+  background: rgba(40, 40, 40, 0.6);
+  border-color: rgba(200, 200, 200, 0.5);
+  color: #e0e0e0;
+  box-shadow: 0 0 12px rgba(180, 180, 180, 0.12);
+}
+.header-fs-btn.active {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+  box-shadow: 0 0 12px rgba(232, 134, 58, 0.2);
+}
+.fs-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.fs-label {
+  font-size: 12px;
+}
+
 /* === Main Body === */
 #main-body {
   flex: 1;
@@ -162,15 +204,15 @@
 }
 #map-container::before {
   top: 0; left: 0;
-  border-top: 2px solid rgba(180, 180, 180, 0.5);
-  border-left: 2px solid rgba(180, 180, 180, 0.5);
-  box-shadow: -2px -2px 10px rgba(180,180,180,0.15);
+  border-top: 2px solid rgba(232, 134, 58, 0.5);
+  border-left: 2px solid rgba(232, 134, 58, 0.5);
+  box-shadow: -2px -2px 10px rgba(232,134,58,0.15);
 }
 #map-container::after {
   top: 0; right: 0;
-  border-top: 2px solid rgba(180, 180, 180, 0.5);
-  border-right: 2px solid rgba(180, 180, 180, 0.5);
-  box-shadow: 2px -2px 10px rgba(180,180,180,0.15);
+  border-top: 2px solid rgba(232, 134, 58, 0.5);
+  border-right: 2px solid rgba(232, 134, 58, 0.5);
+  box-shadow: 2px -2px 10px rgba(232,134,58,0.15);
 }
 
 /* Bottom corners */
@@ -185,15 +227,15 @@
 }
 #map-container .chart-box::before {
   bottom: 0; left: 0;
-  border-bottom: 2px solid rgba(180, 180, 180, 0.5);
-  border-left: 2px solid rgba(180, 180, 180, 0.5);
-  box-shadow: -2px 2px 10px rgba(180,180,180,0.15);
+  border-bottom: 2px solid rgba(232, 134, 58, 0.5);
+  border-left: 2px solid rgba(232, 134, 58, 0.5);
+  box-shadow: -2px 2px 10px rgba(232,134,58,0.15);
 }
 #map-container .chart-box::after {
   bottom: 0; right: 0;
-  border-bottom: 2px solid rgba(180, 180, 180, 0.5);
-  border-right: 2px solid rgba(180, 180, 180, 0.5);
-  box-shadow: 2px 2px 10px rgba(180,180,180,0.15);
+  border-bottom: 2px solid rgba(232, 134, 58, 0.5);
+  border-right: 2px solid rgba(232, 134, 58, 0.5);
+  box-shadow: 2px 2px 10px rgba(232,134,58,0.15);
 }
 
 /* Map HUD Overlay 元素 */
@@ -297,4 +339,16 @@
 /* Chart Box */
 .chart-box {
   width: 100%;
+}
+
+/* === Fullscreen Styles === */
+/* 地图全屏：#map-container 铺满视口（CSS 模拟，可在页面全屏基础上叠加） */
+#map-container.map-fullscreen {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  border-radius: 0;
+  border: none;
 }
