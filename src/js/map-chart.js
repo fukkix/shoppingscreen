@@ -1,108 +1,41 @@
 /* ============================================
-   Map Chart — 海淀区地图 + 商铺标注 + 购物轨迹
+   Map Chart — 区域地图 + 商铺标注 + 购物轨迹
    支持 2D / 3D 切换
-   2D: 强发光边界 + 涟漪散点
-   3D: 玻璃质感建筑群 + 城市街区效果
+   2D: 顶部俯视，多层 geo 叠加发光边界 + effectScatter + lines
+   3D: 倾角俯视，geo3D + bar3D + lines3D + scatter3D
+   底层地图: ECharts 原生 geo / geo3D (基于 GeoJSON 矢量边界)
+   可配置区域 —— 只需替换 MAP_GEO_URL 和 MAP_NAME
    ============================================ */
 import * as echarts from 'echarts';
 import 'echarts-gl';
 import { shops, buyers } from './mock-data.js';
 
+// ===================== 可配置区域 =====================
+const MAP_NAME    = 'haidian';
+const MAP_GEO_URL = './haidian.json';
+const MAP_CENTER  = [116.310, 40.005];
+const MAP_ZOOM_2D = 1.15;
+
 let mapChart = null;
 let currentBuyerIndex = 0;
 let is3D = false;
-let geoJsonData = null;
+let mapRegistered = false;
 
-// === Building cluster generation ===
-// For each shop, generate a cluster of buildings around it
-function generateBuildingCluster(shop) {
-  const [cx, cy] = shop.coords;
-  const baseHeight = shop.todaySales / 25000;
-  const clusterColor = getShopColor(shop.category);
-
-  // Main tower (tallest)
-  const buildings = [
-    { offset: [0, 0], height: baseHeight * 1.0, size: 1.2, name: shop.name },
-  ];
-
-  // Surrounding buildings (2-4 smaller)
-  const count = 2 + Math.floor(Math.random() * 3);
-  const spread = 0.006; // geographic spread
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
-    const dist = spread * (0.4 + Math.random() * 0.6);
-    buildings.push({
-      offset: [Math.cos(angle) * dist, Math.sin(angle) * dist],
-      height: baseHeight * (0.3 + Math.random() * 0.5),
-      size: 0.6 + Math.random() * 0.6,
-      name: ''
-    });
-  }
-
-  return buildings.map(b => ({
-    name: b.name,
-    value: [cx + b.offset[0], cy + b.offset[1], b.height],
-    barSize: b.size,
-    itemStyle: {
-      color: clusterColor,
-      opacity: 0.85
-    }
-  }));
-}
-
-// Decorative "filler" buildings to create cityscape feel
-function generateFillerBuildings() {
-  const fillers = [];
-  const center = [116.310, 40.005];
-  const range = 0.06;
-
-  for (let i = 0; i < 30; i++) {
-    const x = center[0] + (Math.random() - 0.5) * range * 2;
-    const y = center[1] + (Math.random() - 0.5) * range * 2;
-
-    // Skip if too close to any shop
-    const tooClose = shops.some(s =>
-      Math.abs(s.coords[0] - x) < 0.008 && Math.abs(s.coords[1] - y) < 0.008
-    );
-    if (tooClose) continue;
-
-    fillers.push({
-      name: '',
-      value: [x, y, 0.5 + Math.random() * 2],
-      barSize: 0.3 + Math.random() * 0.4,
-      itemStyle: {
-        color: 'rgba(30, 35, 55, 0.6)',
-        opacity: 0.35
-      }
-    });
-  }
-  return fillers;
-}
-
-function getShopColor(category) {
-  const map = {
-    '数码电子': '#e8863a',
-    '服饰鞋包': '#d4a24c',
-    '食品饮料': '#3dbd6e',
-    '美妆护肤': '#c06060',
-    '家居日用': '#8b6cc4',
-    '文体教育': '#3a9ea8'
-  };
-  return map[category] || '#e8863a';
+// ===================== 注册地图 =====================
+async function ensureMapRegistered() {
+  if (mapRegistered) return;
+  const resp = await fetch(MAP_GEO_URL);
+  const geoData = await resp.json();
+  echarts.registerMap(MAP_NAME, geoData);
+  mapRegistered = true;
 }
 
 // ===================== Init =====================
-export function initMapChart(container) {
+export async function initMapChart(container) {
   mapChart = echarts.init(container);
-
-  fetch('/haidian.json')
-    .then(r => r.json())
-    .then(geoJson => {
-      geoJsonData = geoJson;
-      echarts.registerMap('haidian', geoJson);
-      render2DMap();
-      selectBuyer(0);
-    });
+  await ensureMapRegistered();
+  render2DMap();
+  selectBuyer(0);
 }
 
 // ===================== Toggle =====================
@@ -125,68 +58,273 @@ export function toggleMapMode() {
 
 export function getIs3D() { return is3D; }
 
-// ===================== 2D Map (Enhanced Glow) =====================
+// ===================== 颜色工具 =====================
+function getShopColor(category) {
+  const map = {
+    '数码电子': '#4a7a8e',
+    '服饰鞋包': '#ff8c4a',
+    '食品饮料': '#4a8e8e',
+    '美妆护肤': '#ff6b8a',
+    '家居日用': '#5a7a7e',
+    '文体教育': '#ffa64a'
+  };
+  return map[category] || '#4a7a8e';
+}
+
+// ===================== 建筑群生成 (3D) =====================
+function generateBuildingCluster(shop) {
+  const [cx, cy] = shop.coords;
+  const baseHeight = shop.todaySales / 25000;
+  const clusterColor = getShopColor(shop.category);
+  const buildings = [
+    { offset: [0, 0], height: baseHeight * 1.0, size: 1.2, name: shop.name },
+  ];
+  const count = 2 + Math.floor(Math.random() * 3);
+  const spread = 0.006;
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
+    const dist = spread * (0.4 + Math.random() * 0.6);
+    buildings.push({
+      offset: [Math.cos(angle) * dist, Math.sin(angle) * dist],
+      height: baseHeight * (0.3 + Math.random() * 0.5),
+      size: 0.6 + Math.random() * 0.6,
+      name: ''
+    });
+  }
+  return buildings.map(b => ({
+    name: b.name,
+    value: [cx + b.offset[0], cy + b.offset[1], b.height],
+    barSize: b.size,
+    itemStyle: { color: clusterColor, opacity: 0.9 }
+  }));
+}
+
+function generateFillerBuildings() {
+  const fillers = [];
+  const range = 0.08;
+  for (let i = 0; i < 120; i++) {
+    const x = MAP_CENTER[0] + (Math.random() - 0.5) * range * 2;
+    const y = MAP_CENTER[1] + (Math.random() - 0.5) * range * 2;
+    const tooClose = shops.some(s =>
+      Math.abs(s.coords[0] - x) < 0.008 && Math.abs(s.coords[1] - y) < 0.008
+    );
+    if (tooClose) continue;
+    fillers.push({
+      name: '',
+      value: [x, y, 0.3 + Math.random() * 2.5],
+      barSize: 0.2 + Math.random() * 0.3,
+      itemStyle: { color: 'rgba(20, 30, 40, 0.5)', opacity: 0.6 }
+    });
+  }
+  return fillers;
+}
+
+// ===================== 2D Geo 配置 (黑白灰度战术风格) =====================
+function buildGeoLayers2D() {
+  return [
+    // --- Layer 0: 最底层外发光阴影 (高亮白色大范围 glow) ---
+    {
+      map: MAP_NAME,
+      roam: false,
+      zoom: MAP_ZOOM_2D,
+      center: MAP_CENTER,
+      silent: true,
+      label: { show: false },
+      itemStyle: {
+        areaColor: 'transparent',
+        borderColor: 'rgba(232, 134, 58, 0.12)',
+        borderWidth: 14,
+        shadowColor: 'rgba(232, 134, 58, 0.35)',
+        shadowBlur: 80,
+        shadowOffsetX: 0,
+        shadowOffsetY: 0
+      },
+      zlevel: -3,
+      z: 0
+    },
+    // --- Layer 1: 中层发光边框 (高亮灰白光晕) ---
+    {
+      map: MAP_NAME,
+      roam: false,
+      zoom: MAP_ZOOM_2D,
+      center: MAP_CENTER,
+      silent: true,
+      label: { show: false },
+      itemStyle: {
+        areaColor: 'transparent',
+        borderColor: 'rgba(232, 134, 58, 0.4)',
+        borderWidth: 4,
+        shadowColor: 'rgba(232, 134, 58, 0.5)',
+        shadowBlur: 25,
+        shadowOffsetX: 0,
+        shadowOffsetY: 0
+      },
+      zlevel: -2,
+      z: 1
+    },
+    // --- Layer 2: 主地图层 (深黑填充 + 亮白精确边框) ---
+    {
+      map: MAP_NAME,
+      roam: true,
+      zoom: MAP_ZOOM_2D,
+      center: MAP_CENTER,
+      label: {
+        show: true,
+        color: '#ffffff',
+        fontSize: 11,
+        fontFamily: 'Orbitron, Noto Sans SC, sans-serif',
+        textBorderColor: 'rgba(0,0,0,0.9)',
+        textBorderWidth: 3,
+        textShadowColor: 'rgba(255,255,255,0.3)',
+        textShadowBlur: 4,
+        formatter: p => `{bg|${p.name}}`,
+        rich: {
+          bg: {
+            backgroundColor: 'rgba(0,0,0,0.75)',
+            padding: [4, 10],
+            color: '#ffffff',
+            fontSize: 11,
+            fontFamily: 'Orbitron, Noto Sans SC, sans-serif',
+            letterSpacing: 1
+          }
+        }
+      },
+      itemStyle: {
+        areaColor: {
+          type: 'radial',
+          x: 0.5, y: 0.5, r: 0.9,
+          colorStops: [
+            { offset: 0, color: 'rgba(15, 22, 30, 0.4)' },
+            { offset: 0.4, color: 'rgba(10, 16, 26, 0.55)' },
+            { offset: 0.8, color: 'rgba(6, 12, 20, 0.75)' },
+            { offset: 1, color: 'rgba(4, 8, 16, 0.9)' }
+          ]
+        },
+        borderColor: '#e8863a',
+        borderWidth: 1.5,
+        shadowColor: 'rgba(232, 134, 58, 0.4)',
+        shadowBlur: 12
+      },
+      emphasis: {
+        label: {
+          color: '#ffffff',
+          fontSize: 13,
+          fontWeight: 'bold'
+        },
+        itemStyle: {
+          areaColor: 'rgba(20, 30, 40, 0.45)',
+          borderColor: '#e8a050',
+          borderWidth: 2,
+          shadowColor: 'rgba(220, 220, 220, 0.6)',
+          shadowBlur: 20
+        }
+      },
+      zlevel: -1,
+      z: 2
+    }
+  ];
+}
+
+// ===================== HUD 网格线系列 =====================
+function buildHUDGridSeries() {
+  return {
+    name: 'HUD网格',
+    type: 'scatter',
+    coordinateSystem: 'geo',
+    geoIndex: 2,
+    data: [],
+    symbolSize: 0,
+    itemStyle: { opacity: 0 },
+    zlevel: -4,
+    z: -1
+  };
+}
+
+// ===================== 2D Map (战术 HUD 风格) =====================
 function render2DMap() {
   const option = {
     backgroundColor: 'transparent',
-    geo: [
-      // Shadow/glow layer (behind)
-      {
-        map: 'haidian',
-        roam: true,
-        zoom: 1.15,
-        center: [116.310, 40.005],
-        label: { show: false },
-        silent: true,
-        itemStyle: {
-          areaColor: 'transparent',
-          borderColor: '#e8863a',
-          borderWidth: 3,
-          shadowColor: 'rgba(232, 134, 58, 0.4)',
-          shadowBlur: 35,
-          shadowOffsetX: 0,
-          shadowOffsetY: 0
-        },
-        zlevel: -1
-      },
-      // Main map layer
-      {
-        map: 'haidian',
-        roam: true,
-        zoom: 1.15,
-        center: [116.310, 40.005],
-        label: { show: false },
-        itemStyle: {
-          areaColor: {
-            type: 'radial',
-            x: 0.5, y: 0.5, r: 0.8,
-            colorStops: [
-              { offset: 0, color: 'rgba(15, 25, 50, 0.5)' },
-              { offset: 0.6, color: 'rgba(8, 15, 35, 0.75)' },
-              { offset: 1, color: 'rgba(4, 8, 20, 0.9)' }
-            ]
-          },
-          borderColor: 'rgba(180, 120, 60, 0.5)',
-          borderWidth: 1.5,
-          shadowColor: 'rgba(232, 134, 58, 0.3)',
-          shadowBlur: 20
-        },
-        emphasis: {
-          itemStyle: {
-            areaColor: 'rgba(30, 40, 65, 0.5)',
-            borderColor: '#e8863a',
-            borderWidth: 2
-          }
-        }
-      }
-    ],
+    geo: buildGeoLayers2D(),
     tooltip: buildTooltip(),
     series: [
+      buildHUDGridSeries(),
       buildShopScatter2D(),
-      buildTrajectoryLines2D([])
-    ]
+      buildTrajectoryLines2D([]),
+      buildOrderScatter2D([])
+    ],
+    graphic: buildHUDGraphics()
   };
   mapChart.setOption(option);
+
+  // 同步所有 geo 层的平移/缩放
+  mapChart.on('georoam', function() {
+    const opt = mapChart.getOption();
+    const mainGeo = opt.geo[2];
+    mapChart.setOption({
+      geo: [
+        { center: mainGeo.center, zoom: mainGeo.zoom },
+        { center: mainGeo.center, zoom: mainGeo.zoom },
+        {}
+      ]
+    });
+  });
+}
+
+// ===================== HUD 装饰图形 (黑白风格) =====================
+function buildHUDGraphics() {
+  const items = [];
+  // 角落瞄准线
+  const cornerSize = 40;
+  const corners = [
+    { left: 10, top: 10 },
+    { right: 10, top: 10 },
+    { left: 10, bottom: 10 },
+    { right: 10, bottom: 10 }
+  ];
+  corners.forEach((pos, i) => {
+    const isLeft = i === 0 || i === 2;
+    const isTop = i === 0 || i === 1;
+    items.push({
+      type: 'group',
+      left: pos.left, right: pos.right,
+      top: pos.top, bottom: pos.bottom,
+      children: [
+        {
+          type: 'line',
+          shape: { x1: 0, y1: 0, x2: isLeft ? cornerSize : -cornerSize, y2: 0 },
+          style: { stroke: 'rgba(180,180,180,0.4)', lineWidth: 1.5 }
+        },
+        {
+          type: 'line',
+          shape: { x1: 0, y1: 0, x2: 0, y2: isTop ? cornerSize : -cornerSize },
+          style: { stroke: 'rgba(180,180,180,0.4)', lineWidth: 1.5 }
+        }
+      ]
+    });
+  });
+  // 中心十字准星
+  items.push({
+    type: 'group',
+    left: 'center', top: 'center',
+    children: [
+      {
+        type: 'line',
+        shape: { x1: -12, y1: 0, x2: 12, y2: 0 },
+        style: { stroke: 'rgba(180,180,180,0.25)', lineWidth: 1 }
+      },
+      {
+        type: 'line',
+        shape: { x1: 0, y1: -12, x2: 0, y2: 12 },
+        style: { stroke: 'rgba(180,180,180,0.25)', lineWidth: 1 }
+      },
+      {
+        type: 'circle',
+        shape: { cx: 0, cy: 0, r: 4 },
+        style: { fill: 'none', stroke: 'rgba(180,180,180,0.2)', lineWidth: 1 }
+      }
+    ]
+  });
+  return items;
 }
 
 function buildShopScatter2D() {
@@ -194,7 +332,7 @@ function buildShopScatter2D() {
     name: '商铺',
     type: 'effectScatter',
     coordinateSystem: 'geo',
-    geoIndex: 1,
+    geoIndex: 2,
     data: shops.map(shop => ({
       name: shop.name,
       value: [...shop.coords, shop.todaySales],
@@ -203,41 +341,88 @@ function buildShopScatter2D() {
     showEffectOn: 'render',
     rippleEffect: { brushType: 'stroke', scale: 5, period: 3 },
     itemStyle: {
-      color: '#e8863a',
+      color: p => getShopColor(shops.find(s => s.name === p.name)?.category),
       shadowBlur: 12,
-      shadowColor: 'rgba(232,134,58,0.5)'
+      shadowColor: 'rgba(200,200,200,0.3)'
     },
     label: {
-      show: true, position: 'right', formatter: '{b}',
-      color: '#c8cdd8', fontSize: 11,
-      textShadowColor: 'rgba(0,0,0,0.9)', textShadowBlur: 6,
-      textBorderColor: 'rgba(10,15,30,0.6)', textBorderWidth: 2
-    }
+      show: true, position: 'top',
+      distance: 14,
+      formatter: p => `{line|}\n{bg|${p.name}}`,
+      color: '#ffffff', fontSize: 11, fontFamily: 'Orbitron, Noto Sans SC, sans-serif',
+      textShadowColor: 'rgba(0,0,0,0.8)', textShadowBlur: 4,
+      textBorderColor: 'rgba(0,0,0,0.6)', textBorderWidth: 1,
+      rich: {
+        line: {
+          width: 2,
+          height: 10,
+          backgroundColor: 'rgba(255,255,255,0.6)',
+          align: 'center'
+        },
+        bg: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          padding: [5, 12],
+          color: '#ffffff',
+          fontSize: 12,
+          fontFamily: 'Orbitron, Noto Sans SC, sans-serif',
+          fontWeight: 'bold',
+          letterSpacing: 1,
+          align: 'center'
+        }
+      }
+    },
+    zlevel: 10
   };
 }
 
-function buildTrajectoryLines2D(data, color = '#e8863a') {
+function buildTrajectoryLines2D(data, color = '#aaaaaa') {
   return {
     name: '购物轨迹',
     type: 'lines',
     coordinateSystem: 'geo',
-    geoIndex: 1,
+    geoIndex: 2,
     data,
     polyline: false,
     effect: {
       show: true, period: 4, trailLength: 0.5,
-      symbol: 'arrow', symbolSize: 7, color
+      symbol: 'arrow', symbolSize: 5, color
     },
     lineStyle: {
-      color, width: 2.5, opacity: 0.7, curveness: 0.3,
-      shadowColor: color, shadowBlur: 8
-    }
+      color, width: 1, opacity: 0.55, curveness: 0.3
+    },
+    zlevel: 10
   };
 }
 
-// ===================== 3D Map (City Buildings) =====================
+function buildOrderScatter2D(data) {
+  return {
+    name: '轨迹顺序',
+    type: 'scatter',
+    coordinateSystem: 'geo',
+    geoIndex: 2,
+    data,
+    symbol: 'circle',
+    symbolSize: 22,
+    itemStyle: { color: '#e0e0e0', shadowBlur: 12, shadowColor: '#e0e0e0' },
+    label: {
+      show: true, formatter: p => `{bg|${p.name}}`,
+      color: '#fff', fontSize: 12, fontWeight: 'bold',
+      rich: {
+        bg: {
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          padding: [3, 8],
+          color: '#ffffff',
+          fontSize: 12,
+          fontWeight: 'bold'
+        }
+      }
+    },
+    zlevel: 10
+  };
+}
+
+// ===================== 3D Map =====================
 function render3DMap() {
-  // Pre-generate all building data
   const shopClusters = shops.flatMap(shop => generateBuildingCluster(shop));
   const fillerBuildings = generateFillerBuildings();
   const allBuildings = [...shopClusters, ...fillerBuildings];
@@ -245,68 +430,53 @@ function render3DMap() {
   const option = {
     backgroundColor: 'transparent',
     geo3D: {
-      map: 'haidian',
+      map: MAP_NAME,
       roam: true,
+      center: MAP_CENTER,
       viewControl: {
-        distance: 80,
-        alpha: 40,
+        distance: 100,
+        alpha: 45,
         beta: 20,
-        minAlpha: 5,
-        maxAlpha: 75,
-        minDistance: 40,
-        maxDistance: 200,
-        center: [0, 0, 0],
+        panSensitivity: 1,
+        rotateSensitivity: 1,
+        zoomSensitivity: 1,
         autoRotate: false,
-        panSensitivity: 1.5,
-        rotateSensitivity: 1.5,
-        zoomSensitivity: 1.5,
-        damping: 0.9
+        panMouseButton: 'left',
+        rotateMouseButton: 'right'
       },
       label: { show: false },
       itemStyle: {
-        color: 'rgba(6, 12, 25, 0.95)',
-        borderColor: 'rgba(140, 100, 50, 0.3)',
-        borderWidth: 1
+        color: 'rgba(6, 10, 16, 0.95)',
+        borderColor: '#1a3a4a',
+        borderWidth: 1.5,
+        opacity: 1
       },
       emphasis: {
         itemStyle: {
-          color: 'rgba(20, 28, 45, 0.6)',
-          borderColor: '#e8863a'
+          color: 'rgba(15, 22, 30, 0.7)',
+          borderColor: '#4a7a8e',
+          borderWidth: 2
         }
       },
-      environment: 'transparent',
-      shading: 'realistic',
-      realisticMaterial: {
-        roughness: 0.8,
-        metalness: 0.1
-      },
-      light: {
-        main: {
-          intensity: 1.5,
-          shadow: true,
-          shadowQuality: 'high',
-          alpha: 40,
-          beta: 30
-        },
-        ambient: { intensity: 0.4 },
-        ambientCubemap: { exposure: 1, diffuseIntensity: 0.5 }
-      },
-      groundPlane: {
-        show: true,
-        color: 'rgba(3, 6, 14, 0.85)'
-      },
+      environment: 'auto',
+      shading: 'lambert',
       postEffect: {
         enable: true,
-        bloom: { enable: true, intensity: 0.15 },
-        SSAO: { enable: true, radius: 5, intensity: 1.2 },
-        depthOfField: { enable: false }
+        bloom: { enable: true, intensity: 0.8 },
+        SSAO: { enable: true, radius: 5, intensity: 1.2 }
       },
-      temporalSuperSampling: { enable: true },
-      regionHeight: 1.5
+      light: {
+        main: { intensity: 2.5, shadow: true, shadowQuality: 'high', alpha: 45, beta: 30 },
+        ambient: { intensity: 0.35 }
+      },
+      regionHeight: 0.2,
+      groundPlane: {
+        show: true,
+        color: '#060a14'
+      }
     },
     tooltip: buildTooltip(),
     series: [
-      // City buildings
       {
         name: '商铺建筑',
         type: 'bar3D',
@@ -314,34 +484,32 @@ function render3DMap() {
         data: allBuildings,
         barSize: 1.2,
         minHeight: 0.5,
-        shading: 'realistic',
-        realisticMaterial: {
-          roughness: 0.2,
-          metalness: 0.6,
-          detailTexture: null
-        },
+        shading: 'lambert',
         label: {
-          show: true,
-          distance: 3,
+          show: true, distance: 12,
           formatter: p => p.name || '',
           textStyle: {
-            color: '#c8cdd8',
-            fontSize: 11,
-            backgroundColor: 'rgba(8,16,30,0.85)',
-            padding: [3, 8],
-            borderRadius: 3,
-            borderColor: 'rgba(232,134,58,0.4)',
-            borderWidth: 1
+            color: '#ffffff', fontSize: 12, fontFamily: 'Orbitron, Noto Sans SC, sans-serif',
+            backgroundColor: 'rgba(20,40,50,0.9)', padding: [6, 14],
+            borderWidth: 1, borderColor: 'rgba(80,100,110,0.9)',
+            borderRadius: 2
           }
         },
         emphasis: {
-          label: { show: true, fontSize: 14, fontWeight: 'bold' },
-          itemStyle: { color: '#e8a050', opacity: 1 }
+          label: {
+            show: true, fontSize: 14, fontWeight: 'bold', distance: 14,
+            textStyle: {
+              color: '#ffffff', fontSize: 14, fontWeight: 'bold',
+              backgroundColor: 'rgba(25,45,55,0.95)', padding: [8, 16],
+              borderWidth: 1, borderColor: 'rgba(90,110,120,1)',
+              borderRadius: 2
+            }
+          },
+          itemStyle: { color: '#6a8a8e', opacity: 1 }
         },
         animationDurationUpdate: 800,
         animationEasingUpdate: 'cubicOut'
       },
-      // Glowing base points
       {
         name: '商铺基座',
         type: 'scatter3D',
@@ -351,27 +519,15 @@ function render3DMap() {
           value: [...shop.coords, 0]
         })),
         symbolSize: 12,
-        itemStyle: {
-          color: '#e8863a',
-          opacity: 0.8,
-          borderColor: '#d4a24c',
-          borderWidth: 2
-        },
+        itemStyle: { color: '#e8863a', opacity: 0.8, borderColor: '#d4a24c', borderWidth: 2 },
         label: { show: false }
       },
-      // 3D trajectory lines
       {
         name: '购物轨迹3D',
         type: 'lines3D',
         coordinateSystem: 'geo3D',
-        data: [],
-        effect: {
-          show: true,
-          period: 4,
-          trailWidth: 4,
-          trailLength: 0.5,
-          trailColor: '#e8863a'
-        },
+        data: [{ coords: [[116.31, 40.00, 0], [116.31, 40.00, 0]], lineStyle: { opacity: 0 } }],
+        effect: { show: true, period: 4, trailWidth: 4, trailLength: 0.5, trailColor: '#e8863a' },
         lineStyle: { color: '#e8863a', width: 2, opacity: 0.7 }
       }
     ]
@@ -383,19 +539,19 @@ function render3DMap() {
 function buildTooltip() {
   return {
     trigger: 'item',
-    backgroundColor: 'rgba(8, 16, 35, 0.95)',
-    borderColor: '#e8863a',
+    backgroundColor: 'rgba(8, 8, 8, 0.95)',
+    borderColor: '#888888',
     borderWidth: 1,
-    textStyle: { color: '#c8cdd8', fontSize: 12 },
+    textStyle: { color: '#d0d0d0', fontSize: 12 },
     formatter: function(params) {
       const shop = shops.find(s => s.name === params.name);
       if (shop) {
-        return `<div style="font-size:14px;font-weight:bold;color:#e8863a;margin-bottom:6px;">${shop.name}</div>
-          <div style="color:#6a7590;font-size:11px;margin-bottom:6px;">${shop.address}</div>
-          <div>今日客流：<span style="color:#3dbd6e;font-weight:bold;">${shop.todayVisitors.toLocaleString()}</span> 人</div>
-          <div>今日销售：<span style="color:#d4a24c;font-weight:bold;">¥${shop.todaySales.toLocaleString()}</span></div>
-          <div>评分：<span style="color:#d4a24c;">★ ${shop.rating}</span></div>
-          <div style="margin-top:4px;color:#6a7590;">畅销品：${shop.topProducts.join('、')}</div>`;
+        return `<div style="font-size:14px;font-weight:bold;color:#e0e0e0;margin-bottom:6px;">${shop.name}</div>
+          <div style="color:#808080;font-size:11px;margin-bottom:6px;">${shop.address}</div>
+          <div>今日客流：<span style="color:#a0d0a0;font-weight:bold;">${shop.todayVisitors.toLocaleString()}</span> 人</div>
+          <div>今日销售：<span style="color:#d0c0a0;font-weight:bold;">¥${shop.todaySales.toLocaleString()}</span></div>
+          <div>评分：<span style="color:#d0c0a0;">★ ${shop.rating}</span></div>
+          <div style="margin-top:4px;color:#808080;">畅销品：${shop.topProducts.join('、')}</div>`;
       }
       return '';
     }
@@ -433,42 +589,26 @@ function selectBuyer2D(buyer, lineData, shopMap) {
   const orderData = buyer.trajectory.map((shopName, idx) => {
     const coords = shopMap[shopName];
     if (!coords) return null;
-    return { name: `${idx + 1}`, value: [...coords, idx] };
+    return {
+      name: `${idx + 1}`,
+      value: coords,
+      itemStyle: { color: buyer.color, shadowBlur: 12, shadowColor: buyer.color }
+    };
   }).filter(Boolean);
 
   mapChart.setOption({
     series: [
-      // index 0: keep shop scatter unchanged
       {
         name: '商铺',
         type: 'effectScatter',
-        coordinateSystem: 'geo',
-        geoIndex: 1,
         data: shops.map(shop => ({
           name: shop.name,
           value: [...shop.coords, shop.todaySales],
         })),
-        symbolSize: val => Math.max(14, val[2] / 18000),
-        showEffectOn: 'render',
-        rippleEffect: { brushType: 'stroke', scale: 5, period: 3 },
-        itemStyle: {
-          color: '#e8863a',
-          shadowBlur: 12,
-          shadowColor: 'rgba(232,134,58,0.5)'
-        },
-        label: {
-          show: true, position: 'right', formatter: '{b}',
-          color: '#c8cdd8', fontSize: 11,
-          textShadowColor: 'rgba(0,0,0,0.9)', textShadowBlur: 6,
-          textBorderColor: 'rgba(10,15,30,0.6)', textBorderWidth: 2
-        }
       },
-      // index 1: trajectory lines
       {
         name: '购物轨迹',
         type: 'lines',
-        coordinateSystem: 'geo',
-        geoIndex: 1,
         data: lineData,
         effect: {
           show: true, period: 4, trailLength: 0.5,
@@ -479,17 +619,12 @@ function selectBuyer2D(buyer, lineData, shopMap) {
           shadowColor: buyer.color, shadowBlur: 8
         }
       },
-      // index 2: trajectory order markers
       {
         name: '轨迹顺序',
         type: 'scatter',
-        coordinateSystem: 'geo',
-        geoIndex: 1,
         data: orderData,
-        symbol: 'circle', symbolSize: 22,
         itemStyle: { color: buyer.color, shadowBlur: 12, shadowColor: buyer.color },
         label: { show: true, formatter: '{b}', color: '#fff', fontSize: 12, fontWeight: 'bold' },
-        zlevel: 10
       }
     ]
   });
@@ -500,7 +635,6 @@ function selectBuyer3D(buyer, lineData, shopMap) {
     coords: l.coords.map(c => [...c, 5])
   }));
 
-  // Rebuild buildings with trajectory highlighting
   const trajShopNames = new Set(buyer.trajectory);
   const highlightedClusters = shops.flatMap(shop => {
     const cluster = generateBuildingCluster(shop);
@@ -516,19 +650,24 @@ function selectBuyer3D(buyer, lineData, shopMap) {
   });
   const fillers = generateFillerBuildings().map(f => ({
     ...f,
-    itemStyle: { ...f.itemStyle, opacity: 0.25 }
+    itemStyle: { ...f.itemStyle, opacity: 0.65 }
   }));
 
   mapChart.setOption({
     series: [
       {
         name: '商铺建筑',
+        type: 'bar3D',
         data: [...highlightedClusters, ...fillers]
       },
-      { name: '商铺基座' },
+      {
+        name: '商铺基座',
+        type: 'scatter3D'
+      },
       {
         name: '购物轨迹3D',
-        data: lines3DData,
+        type: 'lines3D',
+        data: lines3DData.length ? lines3DData : [{ coords: [[0,0,0], [0,0,0]], lineStyle: { opacity: 0 } }],
         effect: { show: true, period: 4, trailWidth: 5, trailLength: 0.5, trailColor: buyer.color },
         lineStyle: { color: buyer.color, width: 3, opacity: 0.85 }
       }

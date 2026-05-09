@@ -9,6 +9,7 @@ import './css/components.css';
 import './css/animations.css';
 
 // Module Imports
+// mapbox-gl 已移除，使用 ECharts 原生 geo 渲染区域边界
 import { initMapChart, resizeMap, toggleMapMode } from './js/map-chart.js';
 import { initLineChart, resizeLine } from './js/line-chart.js';
 import { initBarChart, resizeBar } from './js/bar-chart.js';
@@ -45,7 +46,7 @@ function updateClock() {
 }
 
 // ===== Init =====
-function init() {
+async function init() {
   // Scale
   adaptScale();
   window.addEventListener('resize', () => {
@@ -71,7 +72,7 @@ function init() {
   initPieChart(document.getElementById('pie-chart'));
 
   // Map
-  initMapChart(document.getElementById('map-chart'));
+  await initMapChart(document.getElementById('map-chart'));
 
   // Map 2D/3D Toggle
   const toggleBtn = document.getElementById('map-mode-toggle');
@@ -80,6 +81,17 @@ function init() {
     toggleBtn.classList.toggle('active-3d', is3D);
     toggleBtn.querySelector('.mode-label').textContent = is3D ? '2D 平面' : '3D 街区';
     toggleBtn.querySelector('.mode-icon').textContent = is3D ? '◆' : '◇';
+  });
+
+  // Map Fullscreen
+  const fsBtn = document.getElementById('map-fullscreen-btn');
+  fsBtn.addEventListener('click', () => {
+    const mapContainer = document.getElementById('map-container');
+    if (!document.fullscreenElement) {
+      mapContainer.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.();
+    }
   });
 
   // Buyer Selector
@@ -97,6 +109,14 @@ function init() {
   initLineChart(document.getElementById('line-chart'));
   initBarChart(document.getElementById('bar-chart'));
   initRadarChart(document.getElementById('radar-chart'));
+
+  // 解除防闪烁隐藏：所有模块初始化完成后淡入显示
+  document.body.style.transition = 'opacity 0.3s ease';
+  document.body.style.opacity = '0';
+  document.body.style.visibility = 'visible';
+  requestAnimationFrame(() => {
+    document.body.style.opacity = '1';
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);

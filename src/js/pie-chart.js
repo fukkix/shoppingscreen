@@ -15,7 +15,7 @@ export function initPieChart(container) {
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'item',
-      backgroundColor: 'rgba(8,16,38,0.95)', borderColor: '#e8863a', borderWidth: 1,
+      backgroundColor: 'rgba(10,16,28,0.95)', borderColor: '#e8863a', borderWidth: 1,
       textStyle: { color: '#c8cdd8', fontSize: 11 },
       formatter: p => `${p.name}<br/>¥${p.value.toLocaleString()} (${p.percent}%)`
     },
@@ -31,7 +31,7 @@ export function initPieChart(container) {
         color: '#c8cdd8', fontSize: 10,
         formatter: '{b}\n{d}%'
       },
-      labelLine: { lineStyle: { color: 'rgba(100,120,160,0.2)' } },
+      labelLine: { lineStyle: { color: 'rgba(100,110,120,0.2)' } },
       emphasis: {
         label: { fontSize: 12, fontWeight: 'bold' },
         itemStyle: { shadowBlur: 20, shadowColor: 'rgba(232,134,58,0.2)' }

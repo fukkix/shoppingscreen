@@ -12,20 +12,20 @@ export function initLineChart(container) {
     grid: { top: 30, right: 20, bottom: 30, left: 50 },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(8,16,38,0.95)',
+      backgroundColor: 'rgba(10,16,28,0.95)',
       borderColor: '#e8863a', borderWidth: 1,
       textStyle: { color: '#c8cdd8', fontSize: 11 },
       formatter: p => `${p[0].axisValue}<br/>销售额：<b style="color:#e8863a">¥${p[0].value.toLocaleString()}</b>`
     },
     xAxis: {
       type: 'category', data: hours,
-      axisLine: { lineStyle: { color: 'rgba(100,120,160,0.2)' } },
+      axisLine: { lineStyle: { color: 'rgba(100,110,120,0.2)' } },
       axisLabel: { color: '#6a7590', fontSize: 10, interval: 3 },
       axisTick: { show: false }
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: 'rgba(100,120,160,0.06)' } },
+      splitLine: { lineStyle: { color: 'rgba(100,110,120,0.06)' } },
       axisLine: { show: false },
       axisLabel: { color: '#6a7590', fontSize: 10, formatter: v => v >= 10000 ? (v/10000)+'w' : v }
     },
@@ -43,7 +43,7 @@ export function initLineChart(container) {
           { offset: 0, color: 'rgba(232,134,58,0.18)' }, { offset: 1, color: 'rgba(232,134,58,0)' }
         ])
       },
-      itemStyle: { color: '#e8863a', borderColor: '#1a2040', borderWidth: 1 },
+      itemStyle: { color: '#e8863a', borderColor: '#1a2028', borderWidth: 1 },
       emphasis: { showSymbol: true, symbolSize: 8 },
       animationDuration: 2000, animationEasing: 'cubicOut'
     }]

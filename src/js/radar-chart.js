@@ -13,7 +13,7 @@ export function initRadarChart(container) {
   chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
-      backgroundColor: 'rgba(8,16,38,0.95)', borderColor: '#e8863a', borderWidth: 1,
+      backgroundColor: 'rgba(10,16,28,0.95)', borderColor: '#e8863a', borderWidth: 1,
       textStyle: { color: '#c8cdd8', fontSize: 11 }
     },
     legend: {
@@ -26,9 +26,9 @@ export function initRadarChart(container) {
       center: ['50%', '45%'],
       radius: '60%',
       axisName: { color: '#6a7590', fontSize: 10 },
-      splitLine: { lineStyle: { color: 'rgba(100,120,160,0.08)' } },
-      splitArea: { areaStyle: { color: ['rgba(100,120,160,0.01)', 'rgba(100,120,160,0.03)'] } },
-      axisLine: { lineStyle: { color: 'rgba(100,120,160,0.1)' } }
+      splitLine: { lineStyle: { color: 'rgba(100,110,120,0.08)' } },
+      splitArea: { areaStyle: { color: ['rgba(100,110,120,0.01)', 'rgba(100,110,120,0.03)'] } },
+      axisLine: { lineStyle: { color: 'rgba(100,110,120,0.1)' } }
     },
     series: [{
       type: 'radar',

@@ -12,7 +12,8 @@
     "vite": "^8.0.10"
   },
   "dependencies": {
-    "echarts": "^6.0.0",
-    "echarts-gl": "^2.0.9"
+    "echarts": "^5.1.2",
+    "echarts-gl": "^2.0.9",
+    "mapbox-gl": "^1.13.0"
   }
 }

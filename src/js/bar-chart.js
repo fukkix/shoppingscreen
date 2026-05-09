@@ -12,18 +12,18 @@ export function initBarChart(container) {
     grid: { top: 10, right: 60, bottom: 20, left: 100 },
     tooltip: {
       trigger: 'axis', axisPointer: { type: 'shadow' },
-      backgroundColor: 'rgba(8,16,38,0.95)', borderColor: '#e8863a', borderWidth: 1,
+      backgroundColor: 'rgba(10,16,28,0.95)', borderColor: '#e8863a', borderWidth: 1,
       textStyle: { color: '#c8cdd8', fontSize: 11 }
     },
     xAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: 'rgba(100,120,160,0.06)' } },
+      splitLine: { lineStyle: { color: 'rgba(100,110,120,0.06)' } },
       axisLine: { show: false }, axisLabel: { show: false }
     },
     yAxis: {
       type: 'category',
       data: sorted.map(s => s.name),
-      axisLine: { lineStyle: { color: 'rgba(100,120,160,0.2)' } },
+      axisLine: { lineStyle: { color: 'rgba(100,110,120,0.2)' } },
       axisLabel: { color: '#c8cdd8', fontSize: 11 },
       axisTick: { show: false }
     },
